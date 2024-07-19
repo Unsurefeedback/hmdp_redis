@@ -49,7 +49,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             //2,如果不符合，返回错误信息
             return Result.fail("手机号格式错误！");
         }
-
+Object object = new Object();
         //3,符合，生成验证码
         String code = RandomUtil.randomNumbers(6);
         //4,保存验证码session
