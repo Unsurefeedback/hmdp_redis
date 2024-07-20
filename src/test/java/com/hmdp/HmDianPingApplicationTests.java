@@ -12,7 +12,7 @@ class HmDianPingApplicationTests {
     private ShopServiceImpl shopService;
 
     @Test
-    void testSaveShop(){
+    void testSaveShop() throws InterruptedException {
         shopService.saveshop2Redis(1L,10L);
     }
 
