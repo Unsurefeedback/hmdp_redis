@@ -8,11 +8,13 @@ import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.RedisData;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
 import static com.hmdp.utils.RedisConstants.*;
@@ -44,6 +46,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         return Result.ok(shop);
     }
 
+    // 互斥锁防止缓存击穿函数
     public Shop queryWithMutux(Long id){
         //先从Redis中查，这里的常量值是固定的前缀 + 店铺id
         String key = CACHE_SHOP_KEY + id;
@@ -137,7 +140,16 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     }
 
 
-
+    public void saveshop2Redis(Long id,Long expireSeconds){
+        //1.查询店城数烟
+        Shop shop = getById(id);
+        //2.封装逻辑过阴时间
+        RedisData redisData = new RedisData();
+        redisData.setData(shop);
+        redisData.setExpireTime(LocalDateTime.now().plusSeconds(expireSeconds));
+        //3.写入Redis
+        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY + id,JSONUtil.toJsonStr(redisData));
+    }
 
     private boolean tryLock(String key){
         // setIfAbsent就是redis中的setnx命令,该命令的作用是只在数据不存在时set成功,此处用setnx命令实现互斥锁
