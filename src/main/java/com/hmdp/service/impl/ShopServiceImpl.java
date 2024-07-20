@@ -14,8 +14,7 @@ import javax.annotation.Resource;
 
 import java.util.concurrent.TimeUnit;
 
-import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
-import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TTL;
+import static com.hmdp.utils.RedisConstants.*;
 
 /**
  * <p>
@@ -40,10 +39,17 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             Shop shop = JSONUtil.toBean(shopJson, Shop.class);
             return Result.ok(shop);
         }
+        // 判断命中的是否是空值,isNotBlank("")为false,所以要再用一个if判断d
+        if (shopJson != null){
+            //返回一个错误信息
+            return Result.fail("店铺信息不存在！");
+        }
         //否则去数据库中查
         Shop shop = getById(id);
         //查不到返回一个错误信息或者返回空都可以，根据自己的需求来
         if (shop == null){
+            // 将空值写入redis,注意TTL时间要尽可能短,防止过多垃圾数据存在
+            stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY + id, "",CACHE_NULL_TTL, TimeUnit.MINUTES);
             return Result.fail("店铺不存在！！");
         }
         //查到了则转为json字符串
