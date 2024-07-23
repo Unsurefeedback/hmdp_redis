@@ -15,12 +15,15 @@ import io.lettuce.core.RedisClient;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.Collections;
 
 /**
  * <p>
@@ -45,7 +48,35 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private RedissonClient redissonClient;
 
+    private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+
+    static {
+        SECKILL_SCRIPT = new DefaultRedisScript<>();
+        SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+        SECKILL_SCRIPT.setResultType(Long.class);
+    }
+
     @Override
+    public Result seckillVoucher(Long voucherId) {
+        Long userId = UserHolder.getUser().getId();
+        long orderId = redisIdWorker.nextId("order");
+        // 1.执行lua脚本
+        Long result = stringRedisTemplate.execute(
+                SECKILL_SCRIPT,
+                Collections.emptyList(),
+                voucherId.toString(), userId.toString(), String.valueOf(orderId)
+        );
+        int r = result.intValue();
+        // 2.判断结果是否为0
+        if (r != 0) {
+            // 2.1.不为0 ，代表没有购买资格
+            return Result.fail(r == 1 ? "库存不足" : "不能重复下单");
+        }
+        // 3.返回订单id
+        return Result.ok(orderId);
+    }
+
+    /* @Override
     public Result seckillVoucher(Long voucherId) {
         //1.查询优惠卷
         SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
@@ -82,7 +113,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             lock.unlock();
         }
 
-    }
+    } */
 
     @Transactional
     public Result createVoucherOrder(Long voucherId){
@@ -96,7 +127,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //4.扣减库存
         boolean success = seckillVoucherService.update()
                 .setSql("stock = stock -1")
-//                .eq("voucher_id", voucherId).eq("stock",voucher.getStock())//where id = ? and stock =? 添加了乐观锁
+               // .eq("voucher_id", voucherId).eq("stock",voucher.getStock())//where id = ? and stock =? 添加了乐观锁
                 .eq("voucher_id", voucherId).gt("stock",0)//where id = ? and stock >0 添加了乐观锁
                 .update();
         //5.创建订单
